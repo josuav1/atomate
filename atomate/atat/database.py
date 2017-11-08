@@ -16,12 +16,12 @@ __email__ = 'mkhorton@lbl.gov'
 
 logger = get_logger(__name__)
 
-class AtatCalcDb(CalcDb):
+class McsqsCalcDb(CalcDb):
 
     def __init__(self, host="localhost", port=27017,
                  database="sqs", collection="tasks",
                  user=None, password=None):
-        super(AtatCalcDb, self).__init__(host, port, database, collection, user, password)
+        super(McsqsCalcDb, self).__init__(host, port, database, collection, user, password)
 
     def build_indexes(self, indexes=None, background=True):
         _indexes = indexes if indexes else ['anonymous_formula']

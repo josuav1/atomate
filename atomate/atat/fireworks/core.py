@@ -15,6 +15,7 @@ from fireworks import ScriptTask
 from pymatgen.analysis.structure_matcher import StructureMatcher, OccupancyComparator
 from monty.serialization import dumpfn
 from pymatgen.transformations.standard_transformations import DiscretizeOccupanciesTransformation
+from fractions import Fraction
 
 __author__ = 'Matthew Horton'
 __credits__ = 'Josua Vieten'
@@ -70,6 +71,9 @@ class McsqsFW(Firework):
         :param kwargs: Other kwargs that are passed to Firework.__init__.
         """
 
+        if walltime < 3:
+            raise ValueError("Please increase walltime.")
+
         if disordered_struct.is_ordered:
             raise ValueError("You must input a disordered structure.")
 
@@ -79,6 +83,9 @@ class McsqsFW(Firework):
 
         if size is None:
             size = self._determine_min_cell(disordered_struct)
+
+        # rescale lattice for unit volume
+        disordered_struct.scale_lattice(1.0)
 
         if clusters is None:
             # TODO: make cluster determination a bit smarter!
@@ -130,7 +137,7 @@ done
         dumpfn({
             'clusters': clusters,
             'user_input_settings': user_input_settings,
-            'walltime': ncores*(walltime-2)
+            'walltime': ncores*(walltime - 2)
         }, "mcsqs_input_args.json")
 
         tasks = [
@@ -138,7 +145,7 @@ done
                 run_mcsqs_cmd,
                 get_bestsqs_cmd,
                 write_version_cmd,
-            ], shell_exe='/bin/bash')
+            ], shell_exe='/bin/bash'),
         ]
 
         super(McsqsFW, self).__init__(tasks, name=name, **kwargs)
@@ -146,7 +153,14 @@ done
     @staticmethod
     def _determine_min_cell(disordered_struct):
         """
-        Enumerate superstructures and determine the smallest superstructure with discrete occupancies.
-        Seems to be very slow.
+        Get a minimum cell size for an ordered structure.
         """
-        return len(disordered_struct)*8
+        denoms = {}
+        for sp_occu in disordered_struct.species_and_occu:
+            for sp, occu in sp_occu.items():
+                denom = Fraction(occu).limit_denominator(100).denominator
+                if sp in denoms:
+                    denoms[sp] = max(denom, denoms[sp])
+                else:
+                    denoms[sp] = denom
+        return max(denoms.values())
