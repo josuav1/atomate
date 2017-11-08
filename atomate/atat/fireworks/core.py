@@ -8,39 +8,39 @@ try:
 except ImportError:
     from fractions import gcd
 
-import warnings
 import multiprocessing
 import os
-import numpy as np
 from fireworks import Firework
 from fireworks import ScriptTask
-from pymatgen import Structure
 from pymatgen.analysis.structure_matcher import StructureMatcher, OccupancyComparator
 from monty.serialization import dumpfn
-from pymatgen.transformations.advanced_transformations import DiscretizeOccupanciesTransformation
-from fractions import Fraction
-from pymatgen.transformations.advanced_transformations import EnumerateStructureTransformation
-from pymatgen.transformations.standard_transformations import OrderDisorderedStructureTransformation
+from pymatgen.transformations.standard_transformations import DiscretizeOccupanciesTransformation
 
+__author__ = 'Matthew Horton'
+__credits__ = 'Josua Vieten'
+__email__ = 'mkhorton@lbl.gov'
 
 class McsqsFW(Firework):
 
     def __init__(self, disordered_struct,
-                 path,
                  name="mcsqs",
                  size=None,
-                 sizemultipl=4,
-                 max_den=8,
-                 tolerance=0.5,
                  clusters=None,
                  user_input_settings=None,
-                 occu_tol=8,
+                 max_denominator=8,
                  walltime=2.5,
                  ncores=None,
                  **kwargs):
         """
         Find a best SQS approximation for a given disordered
         structure using the mcsqs code from the ATAT library.
+
+        One unusual feature of this Firework: walltime must
+        be specified. This is because there are often cases
+        where mcsqs will never terminate (it will keep trying
+        structures at random); however, whatever structure
+        it finds in this time (the 'bestsqs') is often
+        still useful.
 
         :param disordered_struct: disordered structure
         :param name: name of the Firework
@@ -56,10 +56,10 @@ class McsqsFW(Firework):
         :param user_input_settings: dict of additional keyword
         value pairs to pass to mcsqs, such as Monte Carlo
         temperature, no validation is performed on this dict
-        :param: occu_tol (int): As in pymatgen's
-        EnumerateStructureTransformation.
+        :param: max_denominator (int):
         Will round occupancies to the nearest rational number,
-        with the maximum denominator equal to occu_tol.
+        with the maximum denominator as specified. Use None not
+        to do perform rounding, though not mcsqs might not like this!
         :param: walltime (int): Time to run mcsqs for in minutes,
         2 minutes will be deducted from this to run the database
         tasks.
@@ -73,27 +73,27 @@ class McsqsFW(Firework):
         if disordered_struct.is_ordered:
             raise ValueError("You must input a disordered structure.")
 
-        if occu_tol:
-            disordered_struct = self._discretize_cell(disordered_struct,max_denominator=occu_tol)
+        if max_denominator:
+            trans = DiscretizeOccupanciesTransformation(max_denominator)
+            disordered_struct = trans.apply_transformation(disordered_struct)
 
         if size is None:
-            size = self._determine_min_cell(disordered_struct)   #this would be a more elegant way to determine the size, but it seems to take forever
+            size = self._determine_min_cell(disordered_struct)
 
         if clusters is None:
             # TODO: make cluster determination a bit smarter!
             lattice_param = min(disordered_struct.lattice.abc)
             clusters = {
-                -2: lattice_param*1.5,
-                -3: lattice_param*1.5,
-                -4: lattice_param
+                -2: lattice_param*1.501,
+                -3: lattice_param*1.501,
+                -4: lattice_param*1.001
             }
         else:
             for cluster in clusters.keys():
                 if cluster not in [2, 3, 4, 5, 6]:
                     raise ValueError("Mcsqs only supports clusters of 2-6 atoms.")
 
-
-        disordered_struct.to(filename='rndstr2.in')   
+        disordered_struct.to(filename='rndstr.in')
 
         cluster_str = " ".join(["{}={}".format(k, v) for k, v in clusters.items()])
         generate_cluster_cmd = "mcsqs {}".format(cluster_str)
@@ -118,19 +118,13 @@ for (( id=0 ; id<{} ; id ++ ))
 do
     timeout {}m mcsqs -n {} {}  -ip=$id & 
 done
-""".format(ncores, walltime-2, size, user_input_settings_str)
+""".format(ncores, walltime - 2, size, user_input_settings_str)
 
-        # find the best SQS among all that have been run in parallel (using mcsqs' own method; lowest objective function)
-        get_bestsqs_cmd = "sleep " + str(walltime) + "m; mcsqs -best" 
-
-        # copy files from the original directory into the working directory
-        copyfiles = "cp -r -f " + str(path) + "* ."
-
-        # copy resulting files from the working directory back into the originial directory
-        copyfiles1 = "cp -f *.out "  + str(path) + " && cp -f *.log "  + str(path) + " && cp -f FW.json "  + str(path) + " && cp -f clusters.out "  + str(path) + " && cp -f mcsqs_input_args.json "  + str(path) + " && cp -f mcsqs_version.txt "  + str(path)
+        # command to find the best SQS among the several instances of mcsqs run in parallel
+        get_bestsqs_cmd = "mcsqs -best"
 
         # write the mcsqs version to a file for provenance
-        write_version_cmd = "mcsqs -v &> mcsqs_version1.txt; head -n 1 mcsqs_version1.txt > mcsqs_version.txt; rm -f mcsqs_version1.txt"
+        write_version_cmd = "mcsqs -v | head -n 1 > mcsqs_version.txt"
 
         # write our input args, so that they can be picked up by the drone
         dumpfn({
@@ -139,49 +133,15 @@ done
             'walltime': ncores*(walltime-2)
         }, "mcsqs_input_args.json")
 
-        # do not generate clusters if they have already been generated
-        try: 
-            filen = open(str(path) + "clusters.out")
-            cl = 1
-        except:
-            cl = 0
+        tasks = [
+            ScriptTask(script=[
+                run_mcsqs_cmd,
+                get_bestsqs_cmd,
+                write_version_cmd,
+            ], shell_exe='/bin/bash')
+        ]
 
-        if cl == 0:
-            t = [
-                ScriptTask(script=[
-                    copyfiles,
-                    generate_cluster_cmd,
-                    run_mcsqs_cmd,
-                    get_bestsqs_cmd,
-                    write_version_cmd,
-                    copyfiles1
-                ], shell_exe='/bin/bash')
-            ]
-
-        else:
-
-            t = [
-                ScriptTask(script=[
-                    copyfiles,
-                    run_mcsqs_cmd,
-                    get_bestsqs_cmd,
-                    write_version_cmd,
-                    copyfiles1
-                ], shell_exe='/bin/bash')
-            ]
-
-        # TODO: add tracker(s)
-
-        super(McsqsFW, self).__init__(t, name=name, **kwargs)
-
-    @staticmethod
-    def _discretize_cell(disordered_struct,max_denominator=8):
-        """
-        Remove partial occupancies.
-        """
-        trans = DiscretizeOccupanciesTransformation(max_denominator)
-        disc_struct = trans.apply_transformation(disordered_struct)
-        return disc_struct
+        super(McsqsFW, self).__init__(tasks, name=name, **kwargs)
 
     @staticmethod
     def _determine_min_cell(disordered_struct):
@@ -190,13 +150,3 @@ done
         Seems to be very slow.
         """
         return len(disordered_struct)*8
-               
-
-# TODO: add a duplicate checker
-# when we want to create a firework, check the database first
-# if bestsqs present, use that, if not run McsqsFW()
-
-# to do this, will query database for all structures with same space group
-# then for every disordered structure in returned query, run structurematcher
-# if we get a match, use the bestsqs from that doc
-# sm = StructureMatcher(comparator=OccupancyComparator())

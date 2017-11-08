@@ -11,7 +11,13 @@ from atomate.utils.utils import get_logger
 from atomate import __version__ as atomate_version
 from monty.serialization import loadfn
 
+__author__ = 'Matthew Horton'
+__credits__ = 'Kiran Mathew, Shyue Ping Ong, Shyam Dwaraknath, Anubhav Jain, Josua Vieten'
+__email__ = 'mkhorton@lbl.gov'
+# based on VaspDrone
+
 logger = get_logger(__name__)
+
 
 class McsqsDrone:
 
@@ -19,13 +25,13 @@ class McsqsDrone:
 
         logger.info("Assimilating mcsqs for base dir: {}".format(path))
 
+        input_structure = Structure.from_file(os.path.join(path, 'rndstr.in'))
+        anonymous_formula = input_structure.composition.anonymized_formula
 
-        input_structure = Structure.from_file(str(path) + 'rndstr.in')
-        
-        output_structure = Structure.from_file(str(path) + 'bestsqs.out')
+        output_structure = Structure.from_file(os.path.join(path, 'bestsqs.out'))
 
         # get our objective function
-        with open(str(path) + 'bestcorr.out') as f:
+        with open(os.path.join(path, 'bestcorr.out')) as f:
             lines = f.read().split('\n')
             lines = [l for l in lines if l]
             try:
@@ -56,7 +62,7 @@ class McsqsDrone:
 
         # load input args
         try:
-            input_args = loadfn(str(path) +"mcsqs_input_args.json")
+            input_args = loadfn(os.path.join(path, "mcsqs_input_args.json"))
             walltime = input_args['walltime']
             clusters = input_args['clusters']
             user_input_settings = input_args['user_input_settings']
@@ -66,6 +72,7 @@ class McsqsDrone:
             user_input_settings = None
 
         return {
+            'anonymous_formula': anonymous_formula,
             'disordered': input_structure,
             'bestsqs': output_structure,
             'clusters': clusters,
