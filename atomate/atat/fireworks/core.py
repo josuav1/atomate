@@ -131,7 +131,7 @@ done
         get_bestsqs_cmd = "mcsqs -best"
 
         # write the mcsqs version to a file for provenance
-        write_version_cmd = "mcsqs -v &> mcsqs_version1.txt; head -n 1 mcsqs_version1.txt > mcsqs_version.txt; rm -f mcsqs_version1.txt"
+        write_version_cmd = "mcsqs -v 2>&1 | head -n 1 > mcsqs_version.txt"
 
         # write our input args, so that they can be picked up by the drone
         dumpfn({
