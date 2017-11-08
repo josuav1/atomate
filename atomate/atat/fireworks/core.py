@@ -14,7 +14,7 @@ from fireworks import Firework
 from fireworks import ScriptTask
 from pymatgen.analysis.structure_matcher import StructureMatcher, OccupancyComparator
 from monty.serialization import dumpfn
-from pymatgen.transformations.advanced_transformations import DiscretizeOccupanciesTransformation
+from pymatgen.transformations.standard_transformations import DiscretizeOccupanciesTransformation
 from fractions import Fraction
 
 __author__ = 'Matthew Horton'
