@@ -29,7 +29,7 @@ class McsqsFW(Firework):
                  clusters=None,
                  user_input_settings=None,
                  max_denominator=8,
-                 walltime=2.5,
+                 walltime=3,
                  ncores=None,
                  **kwargs):
         """
@@ -100,7 +100,7 @@ class McsqsFW(Firework):
                 if cluster not in [2, 3, 4, 5, 6]:
                     raise ValueError("Mcsqs only supports clusters of 2-6 atoms.")
 
-        disordered_struct.to(filename='rndstr.in')
+        disordered_struct.to(fmt='mcsqs', filename='rndstr.in')
 
         cluster_str = " ".join(["{}={}".format(k, v) for k, v in clusters.items()])
         generate_cluster_cmd = "mcsqs {}".format(cluster_str)
@@ -131,7 +131,7 @@ done
         get_bestsqs_cmd = "mcsqs -best"
 
         # write the mcsqs version to a file for provenance
-        write_version_cmd = "mcsqs -v | head -n 1 > mcsqs_version.txt"
+        write_version_cmd = "mcsqs -v 2>&1 | head -n 1 > mcsqs_version.txt"
 
         # write our input args, so that they can be picked up by the drone
         dumpfn({
