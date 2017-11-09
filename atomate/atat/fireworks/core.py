@@ -163,4 +163,4 @@ done
                     denoms[sp] = max(denom, denoms[sp])
                 else:
                     denoms[sp] = denom
-        return max(denoms.values())
+        return max(denoms.values())*len(disordered_struct)
