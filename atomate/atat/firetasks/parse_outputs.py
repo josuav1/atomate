@@ -56,8 +56,9 @@ class McsqsToDbTask(FiretaskBase):
             with open("mcsqs_task.json", "w") as f:
                 f.write(json.dumps(doc, default=DATETIME_HANDLER))
         else:
-            db = McsqsCalcDb.from_db_file(db_file, admin=True)
-            db.insert(doc)
+            dbins = McsqsCalcDb()
+            db = dbins.mmdb(db_file, admin=True)
+            dbins.inserttask(doc)
 
         logger.info("Finished parsing mcsqs task")
 
