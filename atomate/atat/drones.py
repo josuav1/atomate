@@ -73,7 +73,7 @@ class McsqsDrone:
 
         return {
             'anonymous_formula': anonymous_formula,
-            'disordered': input_structure,
+            'disordered': input_structure.as_dict(),
             'bestsqs': output_structure,
             'clusters': clusters,
             'num_clusters': num_clusters,
