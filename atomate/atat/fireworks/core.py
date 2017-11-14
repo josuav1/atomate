@@ -23,7 +23,7 @@ __email__ = 'mkhorton@lbl.gov'
 
 class McsqsFW(Firework):
 
-    def __init__(self, disordered_struct,
+    def __init__(self, disordered_struct, path, database,
                  name="mcsqs",
                  size=None,
                  clusters=None,
@@ -78,7 +78,7 @@ class McsqsFW(Firework):
             raise ValueError("You must input a disordered structure.")
 
         if max_denominator:
-            trans = DiscretizeOccupanciesTransformation(max_denominator)
+            trans = DiscretizeOccupanciesTransformation(max_denominator,fix_denominator=True,tol=2)
             disordered_struct = trans.apply_transformation(disordered_struct)
 
         if size is None:
@@ -128,7 +128,7 @@ done
 """.format(ncores, walltime - 2, size, user_input_settings_str)
 
         # command to find the best SQS among the several instances of mcsqs run in parallel
-        get_bestsqs_cmd = "mcsqs -best"
+        get_bestsqs_cmd = "sleep " + str(walltime) + "m; mcsqs -best" 
 
         # write the mcsqs version to a file for provenance
         write_version_cmd = "mcsqs -v 2>&1 | head -n 1 > mcsqs_version.txt"
@@ -142,10 +142,11 @@ done
 
         tasks = [
             ScriptTask(script=[
+                generate_cluster_cmd,
                 run_mcsqs_cmd,
                 get_bestsqs_cmd,
                 write_version_cmd,
-            ], shell_exe='/bin/bash'),
+            ], shell_exe='/bin/bash')
         ]
 
         super(McsqsFW, self).__init__(tasks, name=name, **kwargs)
